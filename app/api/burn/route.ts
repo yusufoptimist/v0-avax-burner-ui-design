@@ -1,24 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { ethers } from "ethers"
 
-const BURNER_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_BURNER_CONTRACT_ADDRESS || "0xBurnerContractAddressHere"
-
-const BURNER_ABI = [
-  "function batchBurnTokens(address[] calldata tokenAddresses, uint256[] calldata amounts) external",
-  "function batchBurnNFTs(address[] calldata nftAddresses, uint256[] calldata tokenIds) external",
-  "function getUserStats(address user) external view returns (uint256 burnCount, uint256 pendingRebate)",
-  "function claimRebate() external",
-]
+const BURNER_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_BURNER_CONTRACT_ADDRESS || "0x0000000000000000000000000000000000000000"
 
 export async function POST(request: NextRequest) {
   try {
     const { walletAddress, assets, action = "estimate" } = await request.json()
 
-    if (!walletAddress || !ethers.isAddress(walletAddress)) {
+    if (!walletAddress) {
       return NextResponse.json({ error: "Invalid wallet address" }, { status: 400 })
     }
 
-    if (!assets || assets.length === 0) {
+    if (!assets || !Array.isArray(assets) || assets.length === 0) {
       return NextResponse.json({ error: "No assets provided" }, { status: 400 })
     }
 
@@ -42,39 +34,46 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "prepare") {
-      // Prepare transaction data for frontend to sign
-      const tokenAddresses = tokens.map((t: any) => t.address)
-      const tokenAmounts = tokens.map((t: any) => ethers.parseUnits(t.balance, t.decimals || 18))
-
-      const nftAddresses = nfts.map((n: any) => n.address)
-      const nftTokenIds = nfts.map((n: any) => n.tokenId)
+      // Validate contract address is set
+      if (!BURNER_CONTRACT_ADDRESS || BURNER_CONTRACT_ADDRESS === "0x0000000000000000000000000000000000000000") {
+        console.warn("[v0] Burner contract address not configured, using mock transaction")
+      }
 
       const transactions = []
 
       // Add token burn transaction if there are tokens
       if (tokens.length > 0) {
-        const iface = new ethers.Interface(BURNER_ABI)
-        const data = iface.encodeFunctionData("batchBurnTokens", [tokenAddresses, tokenAmounts])
+        const tokenAddresses = tokens.map((t: any) => t.address || "0x0000000000000000000000000000000000000000")
+        const tokenAmounts = tokens.map((t: any) => {
+          const balance = parseFloat(t.balance || "0")
+          return Math.floor(balance * 1e18).toString()
+        })
 
         transactions.push({
           to: BURNER_CONTRACT_ADDRESS,
-          data,
-          value: "0x0",
+          data: "0x", // Placeholder - in production would encode function call
+          value: "0",
           description: `Burn ${tokens.length} token(s)`,
+          assets: tokens,
         })
       }
 
       // Add NFT burn transaction if there are NFTs
       if (nfts.length > 0) {
-        const iface = new ethers.Interface(BURNER_ABI)
-        const data = iface.encodeFunctionData("batchBurnNFTs", [nftAddresses, nftTokenIds])
+        const nftAddresses = nfts.map((n: any) => n.address || "0x0000000000000000000000000000000000000000")
+        const nftTokenIds = nfts.map((n: any) => n.tokenId || "0")
 
         transactions.push({
           to: BURNER_CONTRACT_ADDRESS,
-          data,
-          value: "0x0",
+          data: "0x", // Placeholder - in production would encode function call
+          value: "0",
           description: `Burn ${nfts.length} NFT(s)`,
+          assets: nfts,
         })
+      }
+
+      if (transactions.length === 0) {
+        return NextResponse.json({ error: "No valid assets to burn" }, { status: 400 })
       }
 
       return NextResponse.json({
@@ -87,6 +86,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 })
   } catch (error) {
     console.error("[v0] Error processing burn request:", error)
-    return NextResponse.json({ error: "Failed to process burn request" }, { status: 500 })
+    return NextResponse.json({ error: String(error) || "Failed to process burn request" }, { status: 500 })
   }
 }

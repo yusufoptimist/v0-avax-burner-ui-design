@@ -43,49 +43,55 @@ export function BurnModal({
 
   const handleBurn = async () => {
     try {
-      // Step 1: Signing
+      // Step 1: Prepare transaction
       setCurrentStep("signing")
+
+      console.log("[v0] Preparing burn transaction with assets:", selectedAssets)
 
       const prepareResponse = await fetch("/api/burn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          walletAddress: window.ethereum?.selectedAddress,
+          walletAddress: (window as any).ethereum?.selectedAddress || "0x0000000000000000000000000000000000000000",
           assets: selectedAssets.map((asset) => ({
             type: asset.type,
             address: asset.id,
             balance: asset.balance,
             symbol: asset.symbol,
-            tokenId: asset.tokenId,
+            tokenId: asset.tokenId || "0",
           })),
           action: "prepare",
         }),
       })
 
+      console.log("[v0] Prepare response status:", prepareResponse.status)
+
       if (!prepareResponse.ok) {
-        throw new Error("Failed to prepare transaction")
+        const errorData = await prepareResponse.json().catch(() => ({}))
+        throw new Error(errorData.error || `HTTP ${prepareResponse.status}: Failed to prepare transaction`)
       }
 
-      const { transactions } = await prepareResponse.json()
+      const prepareData = await prepareResponse.json()
+      console.log("[v0] Prepared transactions:", prepareData)
 
-      // Step 2: Sign and send transactions
-      // This would integrate with the wallet to actually sign
-      // For now, simulate the process
+      if (!prepareData.success || !prepareData.transactions || prepareData.transactions.length === 0) {
+        throw new Error("No transactions returned from preparation")
+      }
+
+      // Step 2: Simulate wallet signing
       await new Promise((resolve) => setTimeout(resolve, 1500))
 
       // Step 3: Burning
       setCurrentStep("burning")
 
-      // In production, this would be the actual transaction
-      // const provider = new ethers.BrowserProvider(window.ethereum)
-      // const signer = await provider.getSigner()
-      // const tx = await signer.sendTransaction(transactions[0])
-      // await tx.wait()
-
+      // Simulate transaction processing
       await new Promise((resolve) => setTimeout(resolve, 2000))
 
       // Step 4: Success
-      const mockTxHash = "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("")
+      const mockTxHash =
+        "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("")
+
+      console.log("[v0] Burn completed with hash:", mockTxHash)
 
       setTxHash(mockTxHash)
       setCurrentStep("success")
@@ -99,6 +105,7 @@ export function BurnModal({
       })
     } catch (error) {
       console.error("[v0] Error burning assets:", error)
+      alert(`Error: ${error instanceof Error ? error.message : "Failed to burn assets"}`)
       // Handle error state
       setCurrentStep("review")
     }

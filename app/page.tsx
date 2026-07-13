@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card"
 import { WalletConnectModal } from "@/components/wallet-connect-modal"
 import { useWallet } from "@/hooks/use-wallet"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 
 export default function LandingPage() {
   const [showConnectModal, setShowConnectModal] = useState(false)
@@ -219,9 +220,9 @@ export default function LandingPage() {
             </div>
 
             <div className="flex items-center gap-6 text-sm text-muted-foreground">
-              <a href="#" className="hover:text-foreground transition-colors">
+              <Link href="/docs" className="hover:text-foreground transition-colors">
                 Docs
-              </a>
+              </Link>
               <a href="#" className="hover:text-foreground transition-colors">
                 GitHub
               </a>
