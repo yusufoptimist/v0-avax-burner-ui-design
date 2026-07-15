@@ -90,8 +90,6 @@ export function WalletConnectModal({ open, onOpenChange, onConnect }: WalletConn
 
       const ethereum = (window as any).ethereum
 
-      console.log(`[v0] Connecting to ${walletType} wallet...`)
-
       // Request account access
       const accounts = await ethereum.request({
         method: "eth_requestAccounts",
@@ -111,7 +109,6 @@ export function WalletConnectModal({ open, onOpenChange, onConnect }: WalletConn
           method: "wallet_switchEthereumChain",
           params: [{ chainId: networkConfig.chainId }],
         })
-        console.log(`[v0] Switched to ${selectedNetwork} network`)
       } catch (switchError: any) {
         // Chain not added, try to add it
         if (switchError.code === 4902) {
@@ -120,15 +117,18 @@ export function WalletConnectModal({ open, onOpenChange, onConnect }: WalletConn
               method: "wallet_addEthereumChain",
               params: [networkConfig],
             })
-            console.log(`[v0] Added Avalanche ${selectedNetwork} network`)
-          } catch (addError) {
+          } catch (addError: any) {
+            // User rejected adding network
+            if (addError.code === 4001) {
+              setConnecting(false)
+              return
+            }
             setError(`Failed to add Avalanche network. Please add it manually in your wallet.`)
             setConnecting(false)
             return
           }
         } else if (switchError.code === 4001) {
-          setError(null)
-          console.log("[v0] User rejected network switch")
+          // User rejected network switch - don't show error
           setConnecting(false)
           return
         } else {
@@ -139,14 +139,12 @@ export function WalletConnectModal({ open, onOpenChange, onConnect }: WalletConn
       }
 
       // Connection successful
-      console.log(`[v0] Successfully connected wallet: ${accounts[0]}`)
       onConnect(accounts[0])
       onOpenChange(false)
     } catch (error: any) {
-      console.error(`[v0] ${walletType} connection error:`, error)
+      // User rejected connection - silently dismiss
       if (error.code === 4001) {
-        setError(null)
-        console.log("[v0] User rejected wallet connection")
+        // Do nothing - user intentionally cancelled
       } else if (error.message?.includes("Already processing")) {
         setError("Request already in progress. Please wait.")
       } else {
