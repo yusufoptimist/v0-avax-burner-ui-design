@@ -40,12 +40,11 @@ export default function LandingPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" className="hidden md:inline-flex">
-              Docs
-            </Button>
-            <Button variant="ghost" size="sm" className="hidden md:inline-flex">
-              GitHub
-            </Button>
+            <Link href="/docs">
+              <Button variant="ghost" size="sm" className="hidden md:inline-flex">
+                Docs
+              </Button>
+            </Link>
             {isConnected ? (
               <Button
                 size="sm"
@@ -223,9 +222,6 @@ export default function LandingPage() {
               <Link href="/docs" className="hover:text-foreground transition-colors">
                 Docs
               </Link>
-              <a href="#" className="hover:text-foreground transition-colors">
-                GitHub
-              </a>
               <a href="#" className="hover:text-foreground transition-colors">
                 Discord
               </a>

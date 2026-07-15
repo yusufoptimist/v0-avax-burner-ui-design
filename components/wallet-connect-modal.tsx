@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Wallet, ExternalLink } from "lucide-react"
+import { Wallet, ExternalLink, AlertCircle } from "lucide-react"
 
 interface WalletConnectModalProps {
   open: boolean
@@ -11,22 +11,89 @@ interface WalletConnectModalProps {
   onConnect: (address: string) => void
 }
 
+const AVALANCHE_MAINNET = {
+  chainId: "0xa86a",
+  chainName: "Avalanche C-Chain",
+  nativeCurrency: { name: "AVAX", symbol: "AVAX", decimals: 18 },
+  rpcUrls: ["https://api.avax.network/ext/bc/C/rpc"],
+  blockExplorerUrls: ["https://snowtrace.io"],
+}
+
+const AVALANCHE_FUJI = {
+  chainId: "0xa869",
+  chainName: "Avalanche Fuji Testnet",
+  nativeCurrency: { name: "AVAX", symbol: "AVAX", decimals: 18 },
+  rpcUrls: ["https://api.avax-test.network/ext/bc/C/rpc"],
+  blockExplorerUrls: ["https://testnet.snowtrace.io"],
+}
+
 export function WalletConnectModal({ open, onOpenChange, onConnect }: WalletConnectModalProps) {
   const [connecting, setConnecting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [selectedNetwork, setSelectedNetwork] = useState<"mainnet" | "fuji">("mainnet")
 
-  const handleConnect = async () => {
+  const handleMetaMaskConnect = async () => {
     setConnecting(true)
+    setError(null)
     try {
-      // Simulate wallet connection
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      // Check if MetaMask is installed
+      if (typeof window !== "undefined" && !(window as any).ethereum) {
+        setError("MetaMask is not installed. Please install MetaMask to continue.")
+        setConnecting(false)
+        return
+      }
 
-      // Mock wallet address
-      const mockAddress = "0x" + Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join("")
-      onConnect(mockAddress)
+      const ethereum = (window as any).ethereum
+
+      // Request account access
+      const accounts = await ethereum.request({
+        method: "eth_requestAccounts",
+      })
+
+      if (!accounts || accounts.length === 0) {
+        setError("No accounts found. Please unlock MetaMask.")
+        setConnecting(false)
+        return
+      }
+
+      // Switch to selected network
+      const networkConfig = selectedNetwork === "mainnet" ? AVALANCHE_MAINNET : AVALANCHE_FUJI
+
+      try {
+        await ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: networkConfig.chainId }],
+        })
+      } catch (switchError: any) {
+        // Chain not added, try to add it
+        if (switchError.code === 4902) {
+          try {
+            await ethereum.request({
+              method: "wallet_addEthereumChain",
+              params: [networkConfig],
+            })
+          } catch (addError) {
+            setError("Failed to add Avalanche network to MetaMask")
+            setConnecting(false)
+            return
+          }
+        } else {
+          setError("Failed to switch network")
+          setConnecting(false)
+          return
+        }
+      }
+
+      // Connection successful
+      onConnect(accounts[0])
       onOpenChange(false)
-    } catch (error) {
-      console.error("Failed to connect wallet:", error)
+    } catch (error: any) {
+      console.error("[v0] MetaMask connection error:", error)
+      if (error.code === 4001) {
+        setError("Connection request was rejected. Please try again.")
+      } else {
+        setError(error.message || "Failed to connect to MetaMask")
+      }
     } finally {
       setConnecting(false)
     }
@@ -74,22 +141,7 @@ export function WalletConnectModal({ open, onOpenChange, onConnect }: WalletConn
             <label className="text-sm font-medium mb-3 block">Choose Wallet</label>
             <div className="space-y-3">
               <Button
-                onClick={handleConnect}
-                disabled={connecting}
-                className="w-full justify-between bg-white/5 hover:bg-white/10 border border-white/10 text-foreground h-auto py-4"
-                variant="outline"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-avax-primary to-avax-secondary flex items-center justify-center">
-                    <Wallet className="w-4 h-4 text-white" />
-                  </div>
-                  <span className="font-semibold">Core Wallet</span>
-                </div>
-                <ExternalLink className="w-4 h-4 text-muted-foreground" />
-              </Button>
-
-              <Button
-                onClick={handleConnect}
+                onClick={handleMetaMaskConnect}
                 disabled={connecting}
                 className="w-full justify-between bg-white/5 hover:bg-white/10 border border-white/10 text-foreground h-auto py-4"
                 variant="outline"
@@ -102,29 +154,22 @@ export function WalletConnectModal({ open, onOpenChange, onConnect }: WalletConn
                 </div>
                 <ExternalLink className="w-4 h-4 text-muted-foreground" />
               </Button>
-
-              <Button
-                onClick={handleConnect}
-                disabled={connecting}
-                className="w-full justify-between bg-white/5 hover:bg-white/10 border border-white/10 text-foreground h-auto py-4"
-                variant="outline"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
-                    <Wallet className="w-4 h-4 text-white" />
-                  </div>
-                  <span className="font-semibold">WalletConnect</span>
-                </div>
-                <ExternalLink className="w-4 h-4 text-muted-foreground" />
-              </Button>
             </div>
           </div>
+
+          {/* Error State */}
+          {error && (
+            <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 flex gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-red-500">{error}</div>
+            </div>
+          )}
 
           {connecting && (
             <div className="text-center py-2">
               <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
                 <div className="w-4 h-4 border-2 border-avax-primary border-t-transparent rounded-full animate-spin" />
-                Connecting to wallet...
+                Connecting to MetaMask...
               </div>
             </div>
           )}
