@@ -90,13 +90,20 @@ export function WalletConnectModal({ open, onOpenChange, onConnect }: WalletConn
     } catch (error: any) {
       console.error("[v0] MetaMask connection error:", error)
       if (error.code === 4001) {
-        setError("Connection request was rejected. Please try again.")
+        setError(null)
+        console.log("[v0] User cancelled MetaMask connection")
+      } else if (error.message?.includes("Already processing")) {
+        setError("Request already in progress. Please wait.")
       } else {
         setError(error.message || "Failed to connect to MetaMask")
       }
     } finally {
       setConnecting(false)
     }
+  }
+
+  const dismissError = () => {
+    setError(null)
   }
 
   return (
@@ -159,9 +166,19 @@ export function WalletConnectModal({ open, onOpenChange, onConnect }: WalletConn
 
           {/* Error State */}
           {error && (
-            <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 flex gap-3">
+            <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 flex gap-3 items-start">
               <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-red-500">{error}</div>
+              <div className="flex-1">
+                <div className="text-sm text-red-500 mb-2">{error}</div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={dismissError}
+                  className="text-red-500 hover:text-red-400 h-auto p-0 text-xs"
+                >
+                  Dismiss
+                </Button>
+              </div>
             </div>
           )}
 
