@@ -11,6 +11,16 @@ interface WalletConnectModalProps {
   onConnect: (address: string) => void
 }
 
+type WalletType = "metamask" | "coinbase" | "core" | "walletconnect" | "generic"
+
+interface WalletProvider {
+  name: string
+  icon: string
+  colors: string
+  check: () => boolean
+  key: WalletType
+}
+
 const AVALANCHE_MAINNET = {
   chainId: "0xa86a",
   chainName: "Avalanche C-Chain",
@@ -27,23 +37,60 @@ const AVALANCHE_FUJI = {
   blockExplorerUrls: ["https://testnet.snowtrace.io"],
 }
 
+const WALLET_PROVIDERS: WalletProvider[] = [
+  {
+    name: "MetaMask",
+    icon: "🦊",
+    colors: "from-orange-500 to-orange-600",
+    check: () => typeof window !== "undefined" && !!(window as any).ethereum?.isMetaMask,
+    key: "metamask",
+  },
+  {
+    name: "Coinbase Wallet",
+    icon: "⚫",
+    colors: "from-blue-600 to-blue-700",
+    check: () => typeof window !== "undefined" && !!(window as any).ethereum?.isCoinbaseWallet,
+    key: "coinbase",
+  },
+  {
+    name: "Core Wallet",
+    icon: "🔴",
+    colors: "from-red-600 to-red-700",
+    check: () => typeof window !== "undefined" && !!(window as any).ethereum?.isCore,
+    key: "core",
+  },
+  {
+    name: "Other EVM Wallet",
+    icon: "🌐",
+    colors: "from-purple-600 to-purple-700",
+    check: () => typeof window !== "undefined" && !!(window as any).ethereum,
+    key: "generic",
+  },
+]
+
 export function WalletConnectModal({ open, onOpenChange, onConnect }: WalletConnectModalProps) {
   const [connecting, setConnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedNetwork, setSelectedNetwork] = useState<"mainnet" | "fuji">("mainnet")
+  const [connectedWallet, setConnectedWallet] = useState<WalletType | null>(null)
 
-  const handleMetaMaskConnect = async () => {
+  const handleConnectWallet = async (walletType: WalletType) => {
     setConnecting(true)
     setError(null)
+    setConnectedWallet(walletType)
     try {
-      // Check if MetaMask is installed
-      if (typeof window !== "undefined" && !(window as any).ethereum) {
-        setError("MetaMask is not installed. Please install MetaMask to continue.")
+      // Check if any EVM provider is available
+      if (typeof window === "undefined" || !(window as any).ethereum) {
+        setError(
+          "No EVM wallet detected. Please install MetaMask, Coinbase Wallet, Core, or another Web3 wallet.",
+        )
         setConnecting(false)
         return
       }
 
       const ethereum = (window as any).ethereum
+
+      console.log(`[v0] Connecting to ${walletType} wallet...`)
 
       // Request account access
       const accounts = await ethereum.request({
@@ -51,7 +98,7 @@ export function WalletConnectModal({ open, onOpenChange, onConnect }: WalletConn
       })
 
       if (!accounts || accounts.length === 0) {
-        setError("No accounts found. Please unlock MetaMask.")
+        setError("No accounts found. Please unlock your wallet.")
         setConnecting(false)
         return
       }
@@ -64,6 +111,7 @@ export function WalletConnectModal({ open, onOpenChange, onConnect }: WalletConn
           method: "wallet_switchEthereumChain",
           params: [{ chainId: networkConfig.chainId }],
         })
+        console.log(`[v0] Switched to ${selectedNetwork} network`)
       } catch (switchError: any) {
         // Chain not added, try to add it
         if (switchError.code === 4902) {
@@ -72,33 +120,41 @@ export function WalletConnectModal({ open, onOpenChange, onConnect }: WalletConn
               method: "wallet_addEthereumChain",
               params: [networkConfig],
             })
+            console.log(`[v0] Added Avalanche ${selectedNetwork} network`)
           } catch (addError) {
-            setError("Failed to add Avalanche network to MetaMask")
+            setError(`Failed to add Avalanche network. Please add it manually in your wallet.`)
             setConnecting(false)
             return
           }
+        } else if (switchError.code === 4001) {
+          setError(null)
+          console.log("[v0] User rejected network switch")
+          setConnecting(false)
+          return
         } else {
-          setError("Failed to switch network")
+          setError("Failed to switch network. Please try manually switching in your wallet.")
           setConnecting(false)
           return
         }
       }
 
       // Connection successful
+      console.log(`[v0] Successfully connected wallet: ${accounts[0]}`)
       onConnect(accounts[0])
       onOpenChange(false)
     } catch (error: any) {
-      console.error("[v0] MetaMask connection error:", error)
+      console.error(`[v0] ${walletType} connection error:`, error)
       if (error.code === 4001) {
         setError(null)
-        console.log("[v0] User cancelled MetaMask connection")
+        console.log("[v0] User rejected wallet connection")
       } else if (error.message?.includes("Already processing")) {
         setError("Request already in progress. Please wait.")
       } else {
-        setError(error.message || "Failed to connect to MetaMask")
+        setError(error.message || "Failed to connect wallet")
       }
     } finally {
       setConnecting(false)
+      setConnectedWallet(null)
     }
   }
 
@@ -147,20 +203,29 @@ export function WalletConnectModal({ open, onOpenChange, onConnect }: WalletConn
           <div>
             <label className="text-sm font-medium mb-3 block">Choose Wallet</label>
             <div className="space-y-3">
-              <Button
-                onClick={handleMetaMaskConnect}
-                disabled={connecting}
-                className="w-full justify-between bg-white/5 hover:bg-white/10 border border-white/10 text-foreground h-auto py-4"
-                variant="outline"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
-                    <Wallet className="w-4 h-4 text-white" />
+              {WALLET_PROVIDERS.map((wallet) => (
+                <Button
+                  key={wallet.key}
+                  onClick={() => handleConnectWallet(wallet.key)}
+                  disabled={connecting}
+                  className="w-full justify-between bg-white/5 hover:bg-white/10 border border-white/10 text-foreground h-auto py-4 disabled:opacity-50"
+                  variant="outline"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${wallet.colors} flex items-center justify-center text-lg`}>
+                      {wallet.icon}
+                    </div>
+                    <span className="font-semibold">{wallet.name}</span>
                   </div>
-                  <span className="font-semibold">MetaMask</span>
-                </div>
-                <ExternalLink className="w-4 h-4 text-muted-foreground" />
-              </Button>
+                  <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                </Button>
+              ))}
+            </div>
+
+            <div className="mt-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+              <p className="text-xs text-blue-400">
+                Don't see your wallet? Any EVM-compatible wallet that supports Web3.js or ethers.js should work with the "Other EVM Wallet" option.
+              </p>
             </div>
           </div>
 
@@ -186,7 +251,7 @@ export function WalletConnectModal({ open, onOpenChange, onConnect }: WalletConn
             <div className="text-center py-2">
               <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
                 <div className="w-4 h-4 border-2 border-avax-primary border-t-transparent rounded-full animate-spin" />
-                Connecting to MetaMask...
+                Connecting to wallet...
               </div>
             </div>
           )}
